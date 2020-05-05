@@ -1,52 +1,84 @@
 package timedmap
 
 import (
+	"runtime"
 	"testing"
 	"time"
 )
 
-const (
-	dCleanupTick = 10 * time.Millisecond
-)
+func BenchmarkMap(b *testing.B) {
+	tm := New()
 
-var tm *TimedMap
-
-func TestMain(m *testing.M) {
-	tm = New(dCleanupTick)
-	m.Run()
+	for i := 0; i < b.N; i++ {
+		tm.Set("hime", "arikawa", 99999999999999)
+		_ = tm.GetValue("hime").(string)
+	}
 }
 
-func TestNew(t *testing.T) {
-	if tm == nil {
-		t.Fatal("TimedMap was nil")
-	}
-	if s := len(tm.container); s != 0 {
-		t.Fatalf("map size was %d != 0", s)
-	}
+func BenchmarkConcurrentRead(b *testing.B) {
+	tm := New()
+	tm.Set("hime", "arikawa", 99999999999)
+
+	b.SetParallelism(runtime.NumCPU() * 2)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			tm.GetValue("hime")
+		}
+	})
+}
+
+func BenchmarkConcurrentWrite(b *testing.B) {
+	tm := New()
+
+	b.SetParallelism(runtime.NumCPU() * 2)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			tm.Set("hime", "arikawa", 99999999999)
+		}
+	})
+}
+
+const cleanupTick = 10 * time.Millisecond
+
+func newTmap(t *testing.T) *Map {
+	tm := New()
+	cl := NewCleaner(cleanupTick)
+	cl.AddCleanable(tm)
+	t.Cleanup(cl.Stop)
+	return tm
 }
 
 func TestFlush(t *testing.T) {
+	var tm = newTmap(t)
+
 	for i := 0; i < 10; i++ {
-		tm.set(i, 0, 1, time.Hour)
+		tm.Set(i, 1, time.Hour)
 	}
 	tm.Flush()
-	if s := len(tm.container); s > 0 {
+	if s := tm.Size(); s > 0 {
 		t.Fatalf("size was %d > 0", s)
 	}
 }
 
 func TestSet(t *testing.T) {
+	tm := newTmap(t)
+
 	key := "tKeySet"
 	val := "tValSet"
 
 	tm.Set(key, val, 20*time.Millisecond)
-	if v := tm.get(key, 0); v == nil {
+	vl, ok := tm.get(key)
+	if !ok {
 		t.Fatal("key was not set")
-	} else if v.value.(string) != val {
+	}
+
+	if vl.Value.(string) != val {
 		t.Fatal("value was not like set")
 	}
-	time.Sleep(40 * time.Millisecond)
-	if v := tm.get(key, 0); v != nil {
+
+	time.Sleep(20*time.Millisecond + cleanupTick)
+
+	if v := tm.GetValue(key); v != nil {
 		t.Fatal("key was not deleted after expire")
 	}
 
@@ -54,6 +86,8 @@ func TestSet(t *testing.T) {
 }
 
 func TestGetValue(t *testing.T) {
+	tm := newTmap(t)
+
 	key := "tKeyGetVal"
 	val := "tValGetVal"
 
@@ -79,7 +113,9 @@ func TestGetValue(t *testing.T) {
 	}
 
 	tm.Set(key, val, 1*time.Microsecond)
+
 	time.Sleep(2 * time.Millisecond)
+
 	if tm.GetValue(key) != nil {
 		t.Fatal("expired key was not removed by get func")
 	}
@@ -88,21 +124,20 @@ func TestGetValue(t *testing.T) {
 }
 
 func TestGetExpire(t *testing.T) {
+	tm := newTmap(t)
+
 	key := "tKeyGetExp"
 	val := "tValGetExp"
 
 	tm.Set(key, val, 50*time.Millisecond)
 	ct := time.Now().Add(50 * time.Millisecond)
 
-	if _, err := tm.GetExpires("keyNotExists"); err.Error() != "key not found" {
-		t.Fatal("err was not 'key not found': ", err)
+	ex, ok := tm.GetExpires(key)
+	if !ok {
+		t.Fatal(key, "does not exist.")
 	}
 
-	exp, err := tm.GetExpires(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d := ct.Sub(exp); d > 1*time.Millisecond {
+	if d := ct.Sub(ex); d > 1*time.Millisecond {
 		t.Fatalf("expire date diff was %d > 1 millisecond", d)
 	}
 
@@ -110,6 +145,8 @@ func TestGetExpire(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
+	tm := newTmap(t)
+
 	key := "tKeyCont"
 
 	tm.Set(key, 1, 30*time.Millisecond)
@@ -131,37 +168,44 @@ func TestContains(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
+	tm := newTmap(t)
+
 	key := "tKeyRem"
 
 	tm.Set(key, 1, time.Hour)
 	tm.Remove(key)
 
-	if v := tm.get(key, 0); v != nil {
+	if _, ok := tm.get(key); ok {
 		t.Fatal("key still exists after remove")
 	}
 
 	tm.Flush()
 }
 
-func TestRefresh(t *testing.T) {
-	key := "tKeyRef"
+func TestExtend(t *testing.T) {
+	tm := newTmap(t)
 
-	if err := tm.Refresh("keyNotExists", time.Hour); err == nil || err.Error() != "key not found" {
-		t.Fatalf("error on non existing key was %v != 'key not found'", err)
+	const key = "tKeyRef"
+
+	if ok := tm.Extend("keyNotExists", time.Hour); ok {
+		t.Fatal("Non-existing key was refreshed.")
 	}
 
-	tm.Set(key, 1, 12*time.Millisecond)
-	if err := tm.Refresh(key, 50*time.Millisecond); err != nil {
-		t.Fatal(err)
+	tm.Set(key, 1, 20*time.Millisecond)
+
+	if ok := tm.Extend(key, 30*time.Millisecond); !ok {
+		t.Fatal("Failed to refresh key.")
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	if v := tm.get(key, 0); v == nil {
-		t.Fatal("key was not refreshed")
+
+	if v := tm.GetValue(key); v == nil {
+		t.Fatal("Key was not extended.")
 	}
 
-	time.Sleep(100 * time.Millisecond)
-	if v := tm.get(key, 0); v != nil {
+	time.Sleep(20*time.Millisecond + cleanupTick)
+
+	if _, ok := tm.get(key); ok {
 		t.Fatal("key was not deleted after refreshed time")
 	}
 
@@ -169,6 +213,8 @@ func TestRefresh(t *testing.T) {
 }
 
 func TestSize(t *testing.T) {
+	var tm = newTmap(t)
+
 	for i := 0; i < 25; i++ {
 		tm.Set(i, 1, 50*time.Millisecond)
 	}
@@ -177,24 +223,4 @@ func TestSize(t *testing.T) {
 	}
 
 	tm.Flush()
-}
-
-func TestCallback(t *testing.T) {
-	var cbCalled bool
-	tm.Set(1, 3, 25*time.Millisecond, func(v interface{}) {
-		cbCalled = true
-	})
-
-	time.Sleep(50 * time.Millisecond)
-	if !cbCalled {
-		t.Fatal("callback has not been called")
-	}
-	if v := tm.get(1, 0); v != nil {
-		t.Fatal("key was not deleted after expire time")
-	}
-}
-
-func TestStopCleaner(t *testing.T) {
-	tm.StopCleaner()
-	time.Sleep(10 * time.Millisecond)
 }
