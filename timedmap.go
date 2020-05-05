@@ -87,15 +87,6 @@ func (tm *Map) Remove(key interface{}) {
 	tm.mtx.Unlock()
 }
 
-// Refresh sets a new expiry time for the key.
-func (tm *Map) Refresh(key interface{}, t time.Time) bool {
-	v, ok := tm.get(key)
-	if ok {
-		atomic.StoreInt64(&v.expires, t.UnixNano())
-	}
-	return ok
-}
-
 // Extend adds the duration into the expiry time.
 func (tm *Map) Extend(key interface{}, d time.Duration) bool {
 	v, ok := tm.get(key)

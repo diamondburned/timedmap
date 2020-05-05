@@ -119,8 +119,6 @@ func TestGetValue(t *testing.T) {
 	if tm.GetValue(key) != nil {
 		t.Fatal("expired key was not removed by get func")
 	}
-
-	tm.Flush()
 }
 
 func TestGetExpire(t *testing.T) {
@@ -140,8 +138,6 @@ func TestGetExpire(t *testing.T) {
 	if d := ct.Sub(ex); d > 1*time.Millisecond {
 		t.Fatalf("expire date diff was %d > 1 millisecond", d)
 	}
-
-	tm.Flush()
 }
 
 func TestContains(t *testing.T) {
@@ -163,8 +159,6 @@ func TestContains(t *testing.T) {
 	if tm.Contains(key) {
 		t.Fatal("expired key was detected as containing")
 	}
-
-	tm.Flush()
 }
 
 func TestRemove(t *testing.T) {
@@ -178,8 +172,6 @@ func TestRemove(t *testing.T) {
 	if _, ok := tm.get(key); ok {
 		t.Fatal("key still exists after remove")
 	}
-
-	tm.Flush()
 }
 
 func TestExtend(t *testing.T) {
@@ -208,8 +200,6 @@ func TestExtend(t *testing.T) {
 	if _, ok := tm.get(key); ok {
 		t.Fatal("key was not deleted after refreshed time")
 	}
-
-	tm.Flush()
 }
 
 func TestSize(t *testing.T) {
@@ -221,6 +211,4 @@ func TestSize(t *testing.T) {
 	if s := tm.Size(); s != 25 {
 		t.Fatalf("size was %d != 25", s)
 	}
-
-	tm.Flush()
 }

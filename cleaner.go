@@ -43,7 +43,7 @@ func (c *Cleaner) AddCallback(onTicks ...func()) {
 	c.onTickQ = append(c.onTickQ, onTicks...)
 }
 func (c *Cleaner) AddCleanable(cleanable Cleanable) {
-	c.onTickQ = append(c.onTickQ, cleanable.Cleanup)
+	c.AddCallback(cleanable.Cleanup)
 }
 
 func (c *Cleaner) Start() {
