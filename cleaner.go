@@ -1,6 +1,7 @@
 package timedmap
 
 import (
+	"sync"
 	"time"
 )
 
@@ -21,7 +22,9 @@ func (t *DefaultTicker) Stop() {
 type Cleaner struct {
 	ticker   Ticker
 	stopChan chan struct{}
-	onTickQ  []func()
+
+	qMutex  sync.Mutex
+	onTickQ []func()
 }
 
 type Cleanable interface {
@@ -40,7 +43,9 @@ func NewCleanerCustom(ticker Ticker) *Cleaner {
 }
 
 func (c *Cleaner) AddCallback(onTicks ...func()) {
+	c.qMutex.Lock()
 	c.onTickQ = append(c.onTickQ, onTicks...)
+	c.qMutex.Unlock()
 }
 func (c *Cleaner) AddCleanable(cleanable Cleanable) {
 	c.AddCallback(cleanable.Cleanup)
@@ -51,9 +56,11 @@ func (c *Cleaner) Start() {
 		for {
 			select {
 			case <-c.ticker.Chan():
+				c.qMutex.Lock()
 				for _, fn := range c.onTickQ {
 					fn()
 				}
+				c.qMutex.Unlock()
 			case <-c.stopChan:
 				break
 			}
