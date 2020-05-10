@@ -72,7 +72,7 @@ func (tm *Map) GetValue(key interface{}) interface{} {
 func (tm *Map) GetExpires(key interface{}) (time.Time, bool) {
 	v, ok := tm.Get(key)
 	if ok {
-		return time.Unix(0, v.expires), true
+		return v.ExpiryTime(), true
 	}
 	return time.Time{}, false
 }
