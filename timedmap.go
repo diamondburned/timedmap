@@ -30,6 +30,11 @@ func (e *Element) Expires() int64 {
 	return atomic.LoadInt64(&e.expires)
 }
 
+// ExpiryTime returns the expiry time in time.Time. This method is thread-safe.
+func (e *Element) ExpiryTime() time.Time {
+	return time.Unix(0, e.Expires())
+}
+
 // New creates and returns a new instance of Map. This Map does not
 // periodically clean up.
 func New() *Map {
