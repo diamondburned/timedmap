@@ -67,7 +67,7 @@ func TestSet(t *testing.T) {
 	val := "tValSet"
 
 	tm.Set(key, val, 20*time.Millisecond)
-	vl, ok := tm.get(key)
+	vl, ok := tm.Get(key)
 	if !ok {
 		t.Fatal("key was not set")
 	}
@@ -169,7 +169,7 @@ func TestRemove(t *testing.T) {
 	tm.Set(key, 1, time.Hour)
 	tm.Remove(key)
 
-	if _, ok := tm.get(key); ok {
+	if _, ok := tm.Get(key); ok {
 		t.Fatal("key still exists after remove")
 	}
 }
@@ -197,7 +197,7 @@ func TestExtend(t *testing.T) {
 
 	time.Sleep(20*time.Millisecond + cleanupTick)
 
-	if _, ok := tm.get(key); ok {
+	if _, ok := tm.Get(key); ok {
 		t.Fatal("key was not deleted after refreshed time")
 	}
 }
